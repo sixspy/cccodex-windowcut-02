@@ -23,7 +23,7 @@ PRODUCT_META = {
         "hold_staging",
         "reopen",
     ],
-    "stubs": ["hold_release", "late_promote", "partition_mat", "reopen"],
+    "stubs": ["hold_release", "partition_mat", "reopen"],
 }
 
 
@@ -131,6 +131,27 @@ CREATE TABLE IF NOT EXISTS reject_slips(
   event_ts TEXT NOT NULL,
   amount REAL NOT NULL,
   reason TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS promote_register(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  path TEXT NOT NULL,
+  decided_by TEXT NOT NULL,
+  decided_on TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS promote_ledger(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  late_id INTEGER NOT NULL,
+  biz_key TEXT NOT NULL,
+  source_window TEXT,
+  target_window_id INTEGER NOT NULL,
+  target_window_name TEXT NOT NULL,
+  event_id INTEGER NOT NULL,
+  actor TEXT NOT NULL,
+  path TEXT NOT NULL,
+  status TEXT NOT NULL,
+  detail TEXT,
   created_at TEXT NOT NULL
 );
 """
@@ -250,11 +271,27 @@ def seed_if_empty(conn: sqlite3.Connection) -> None:
     )
 
 
+def ensure_promote_register(conn: sqlite3.Connection) -> None:
+    """迟到补入册：选定口径落册。甲路径（整笔同事务），登记日 2026-11-20。
+
+    当天禁止改口；实现口径与册不符则拒写并记「补入偏了」。
+    """
+    if conn.execute("SELECT COUNT(*) c FROM promote_register").fetchone()["c"] == 0:
+        from datetime import datetime
+
+        now = datetime.now().isoformat(timespec="seconds")
+        conn.execute(
+            "INSERT INTO promote_register(path,decided_by,decided_on,created_at) VALUES (?,?,?,?)",
+            ("甲", "system", now[:10], now),
+        )
+
+
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
         ensure_users(conn)
         seed_if_empty(conn)
+        ensure_promote_register(conn)
         conn.commit()
 
 

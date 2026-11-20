@@ -24,6 +24,8 @@ createApp({
     const reconAll = ref([]);
     const lateItems = ref([]);
     const lateSummary = ref({});
+    const promoteTarget = ref("");
+    const promoteRegister = ref(null);
     const audits = ref([]);
     const contention = ref([]);
     const locks = ref([]);
@@ -94,6 +96,13 @@ createApp({
       const ls = await api.get("/api/late-bucket/summary");
       if (ls === null) return;
       lateSummary.value = ls.body || {};
+      const pr = await api.get("/api/late-promote-register");
+      if (pr === null) return;
+      promoteRegister.value = pr.body || null;
+      if (!promoteTarget.value && windows.value.length) {
+        const open = windows.value.find((w) => w.status === "开启");
+        promoteTarget.value = (open || windows.value[0]).name;
+      }
       const ra = await api.get("/api/reconcile");
       if (ra === null) return;
       reconAll.value = Array.isArray(ra.body.items) ? ra.body.items : [];
@@ -159,12 +168,19 @@ createApp({
     }
 
     async function promoteLate(id) {
+      actionErr.value = "";
       const target =
-        (windows.value.find((w) => w.status === "开启") || {}).name || "W-1102";
-      await api.post("/api/late-bucket/promote-stub", {
+        promoteTarget.value ||
+        (windows.value.find((w) => w.status === "开启") || {}).name ||
+        "";
+      const r = await api.post("/api/late-bucket/promote", {
         late_id: id,
         target_window_name: target,
       });
+      if (!r) return;
+      actionErr.value = r.ok
+        ? "已补入：" + target + "（甲路径·整笔同事务）"
+        : r.body.detail || "补入失败";
       await refresh();
     }
 
@@ -204,6 +220,14 @@ createApp({
       reconAll,
       lateItems,
       lateSummary,
+      promoteTarget,
+      promoteRegister,
+      promoteRegisterText: computed(() => {
+        const r = promoteRegister.value;
+        if (!r || !r.register) return "未定口径";
+        const label = (r.paths && r.paths[r.register.path]) || "";
+        return r.register.path + "（" + label + "）· " + r.register.decided_on + " 定";
+      }),
       audits,
       contention,
       locks,

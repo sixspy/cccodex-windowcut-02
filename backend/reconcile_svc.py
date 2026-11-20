@@ -33,6 +33,11 @@ def reconcile(wid: int, authorization: AuthHeader = None):
             "SELECT COUNT(*) c FROM reject_slips WHERE window_name=?",
             (w["name"],),
         ).fetchone()["c"]
+        promoted = conn.execute(
+            """SELECT COUNT(*) c FROM promote_ledger
+               WHERE target_window_id=? AND status='已落成'""",
+            (wid,),
+        ).fetchone()["c"]
         aligned = (
             bool(mat)
             and mat["row_count"] == ev["c"]
@@ -45,6 +50,7 @@ def reconcile(wid: int, authorization: AuthHeader = None):
             "materialized": dict(mat) if mat else None,
             "late_bucket": late,
             "rejects": rejects,
+            "promoted_in": promoted,
             "aligned": aligned,
         }
 
